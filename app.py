@@ -206,16 +206,17 @@ def generate_image(prompt):
             status_placeholder.success("Image generated successfully!")
             return image_url
         else:
-            print(f"ERROR: DALL-E image generation failed: No image URL found in response.")
-            status_placeholder.error("DALL-E image generation failed: No image data returned. Check logs for details.")
+            # Add more specific logging for when URL is not found
+            print(f"ERROR: DALL-E image generation failed: No image URL found in response. Full response data: {response.data}")
+            status_placeholder.error("DALL-E image generation failed: No image data returned. Check Streamlit Cloud logs for full response details.")
             return None
     except openai.APIError as e:
         print(f"ERROR: OpenAI DALL-E API error: {e}")
-        status_placeholder.error(f"OpenAI DALL-E API error: {e}. Check logs for details.")
+        status_placeholder.error(f"OpenAI DALL-E API error: {e}. Please check your API key, permissions, and DALL-E quota. See Streamlit Cloud logs for more details.")
         return None
     except Exception as e:
         print(f"ERROR: An unexpected error occurred during DALL-E image generation: {e}")
-        status_placeholder.error(f"An unexpected error occurred during DALL-E image generation: {e}. Check logs for details.")
+        status_placeholder.error(f"An unexpected error occurred during DALL-E image generation: {e}. Check Streamlit Cloud logs for details.")
         return None
     finally:
         st.session_state.generating_image = False
