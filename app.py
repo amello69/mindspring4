@@ -658,7 +658,7 @@ def tutor_page():
                     response = client.chat.completions.create(
                         model="gpt-4.1-nano", 
                         messages=messages,
-                        max_tokens=200, # Keeping at 200 as per your previous instruction
+                        max_tokens=500, # Increased max_tokens to allow for longer responses
                         temperature=0.7,
                     )
                     tutor_response = response.choices[0].message.content
