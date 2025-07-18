@@ -619,7 +619,7 @@ def tutor_page():
             generate_visual_button = st.button("Generate Visual Explanation", disabled=st.session_state.generating_image) # Disable while generating
 
         with col2:
-            st.subheader("Chat History")
+            st.subheader("Session Transcript") # Changed from "Chat History"
             chat_display_area = st.container(height=400, border=True)
 
             # Iterate through chat history, skipping the initial system message for display
@@ -640,10 +640,6 @@ def tutor_page():
                 st.error("You have no tokens left! Please contact support for more.")
                 return
 
-            # Decrement tokens for text interaction
-            user_data['tokens'] -= 1
-            update_user_data(user_data) # Save updated tokens to Firestore
-
             # Add user message to history
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             save_chat_history() # Save history to Firestore
@@ -658,11 +654,22 @@ def tutor_page():
                     response = client.chat.completions.create(
                         model="gpt-4.1-nano", 
                         messages=messages,
-                        max_tokens=500, # Increased max_tokens to allow for longer responses
+                        max_tokens=1000, # Increased max_tokens to allow for longer responses
                         temperature=0.7,
                     )
                     tutor_response = response.choices[0].message.content
-                
+                    
+                    # Deduct actual tokens used from user's balance
+                    if response.usage:
+                        tokens_to_deduct = response.usage.total_tokens
+                        user_data['tokens'] = max(0, user_data['tokens'] - tokens_to_deduct) # Ensure tokens don't go below 0
+                        update_user_data(user_data) # Save updated tokens to Firestore
+                        st.sidebar.metric("Tokens Remaining", user_data['tokens']) # Update sidebar immediately
+                        print(f"DEBUG: Deducted {tokens_to_deduct} tokens for text response. Remaining: {user_data['tokens']}")
+                    else:
+                        print("WARNING: OpenAI API response did not contain usage information.")
+
+
                 # Add tutor response to history
                 st.session_state.chat_history.append({"role": "assistant", "content": tutor_response})
                 
@@ -676,29 +683,18 @@ def tutor_page():
 
             except openai.APIError as e:
                 st.error(f"OpenAI API error: {e}")
-                # Revert token decrement if API call fails
-                user_data['tokens'] += 1
-                update_user_data(user_data)
+                # No token re-addition here, as the deduction only happens on successful usage retrieval
             except Exception as e:
                 st.error(f"An unexpected error occurred: {e}")
-                # Revert token decrement if API call fails
-                user_data['tokens'] += 1
-                update_user_data(user_data)
+                # No token re-addition here, as the deduction only happens on successful usage retrieval
 
         elif generate_visual_button:
             # Cost for image generation (e.g., 50 tokens per image)
-            # Note: DALL-E 3 pricing is per image ($0.04 for 1024x1024 standard), not token-based.
-            # The 'tokens' here are abstract points for the user's balance.
-            IMAGE_GENERATION_COST = 50 
-            if current_tokens < IMAGE_GENERATION_COST:
-                st.error(f"You need at least {IMAGE_GENERATION_COST} tokens to generate a visual. You have {current_tokens} tokens.")
-                return
+            # Note: DALL-E 3 pricing is per image ($0.04 for 1024x1024 standard), not token-based by OpenAI.
+            # The 'tokens' here represent an abstract cost in the app's internal token system.
+            IMAGE_GENERATION_CREDIT_COST = 50 
 
-            # Decrement tokens for image generation
-            user_data['tokens'] -= IMAGE_GENERATION_COST
-            update_user_data(user_data) # Save updated tokens to Firestore
-
-            # Get the last assistant message as context for image generation
+            # First, generate the image prompt using GPT-4.1-nano
             last_tutor_message = ""
             for msg in reversed(st.session_state.chat_history):
                 if msg["role"] == "assistant":
@@ -709,32 +705,47 @@ def tutor_page():
                 st.warning("No recent tutor message to generate a visual from. Please ask a question first.")
                 return
 
-            # Use GPT-4.1-nano to generate a concise image prompt from the tutor's last response
-            image_prompt_generation_messages = [
-                {"role": "system", "content": "You are an assistant that generates concise, descriptive image prompts based on provided text, suitable for a visual learner. Focus on key concepts. Max 50 words."},
-                {"role": "user", "content": f"Generate an image prompt based on this: {last_tutor_message}"}
-            ]
-            
+            # Check if user has enough tokens for both prompt generation and image credit
+            # Estimate prompt token cost (e.g., 50 tokens for prompt generation)
+            estimated_prompt_tokens = 50 
+            total_estimated_cost = estimated_prompt_tokens + IMAGE_GENERATION_CREDIT_COST
+
+            if current_tokens < total_estimated_cost:
+                st.error(f"You need at least {total_estimated_cost} tokens to generate a visual (including prompt generation). You have {current_tokens} tokens.")
+                return
+
             image_gen_prompt = ""
             try:
                 with st.spinner("Crafting image prompt..."):
                     client = openai.OpenAI(api_key=openai_api_key)
                     prompt_response = client.chat.completions.create(
                         model="gpt-4.1-nano", # Using gpt-4.1-nano for prompt generation
-                        messages=image_prompt_generation_messages,
+                        messages=[
+                            {"role": "system", "content": "You are an assistant that generates concise, descriptive image prompts based on provided text, suitable for a visual learner. Focus on key concepts. Max 50 words."},
+                            {"role": "user", "content": f"Generate an image prompt based on this: {last_tutor_message}"}
+                        ],
                         max_tokens=50,
                         temperature=0.7
                     )
                     image_gen_prompt = prompt_response.choices[0].message.content
+
+                    # Deduct tokens for prompt generation
+                    if prompt_response.usage:
+                        prompt_tokens_deducted = prompt_response.usage.total_tokens
+                        user_data['tokens'] = max(0, user_data['tokens'] - prompt_tokens_deducted)
+                        update_user_data(user_data)
+                        st.sidebar.metric("Tokens Remaining", user_data['tokens'])
+                        print(f"DEBUG: Deducted {prompt_tokens_deducted} tokens for image prompt generation. Remaining: {user_data['tokens']}")
+                    else:
+                        print("WARNING: OpenAI API response for image prompt generation did not contain usage information.")
+
             except openai.APIError as e:
                 st.error(f"Error generating image prompt: {e}")
-                user_data['tokens'] += IMAGE_GENERATION_COST # Revert tokens
-                update_user_data(user_data)
+                # No token re-addition here, as the deduction only happens on successful usage retrieval
                 return
             except Exception as e:
                 st.error(f"An unexpected error occurred while crafting image prompt: {e}")
-                user_data['tokens'] += IMAGE_GENERATION_COST # Revert tokens
-                update_user_data(user_data)
+                # No token re-addition here, as the deduction only happens on successful usage retrieval
                 return
 
             if image_gen_prompt:
@@ -748,10 +759,23 @@ def tutor_page():
 
                 if generated_image_url:
                     st.session_state.chat_history.append({"role": "image", "content": generated_image_url})
+                    
+                    # Deduct the fixed credit cost for the DALL-E image itself
+                    user_data['tokens'] = max(0, user_data['tokens'] - IMAGE_GENERATION_CREDIT_COST)
+                    update_user_data(user_data)
+                    st.sidebar.metric("Tokens Remaining", user_data['tokens'])
+                    print(f"DEBUG: Deducted {IMAGE_GENERATION_CREDIT_COST} credits for DALL-E image. Remaining: {user_data['tokens']}")
+
                     save_chat_history()
                     st.rerun() # Rerun to display the image
                 else:
                     st.error("Failed to generate visual explanation.")
+                    # If image generation fails, consider refunding the IMAGE_GENERATION_CREDIT_COST
+                    # Note: Prompt generation tokens are already deducted.
+                    user_data['tokens'] += IMAGE_GENERATION_CREDIT_COST # Refund image credit cost
+                    update_user_data(user_data)
+                    st.sidebar.metric("Tokens Remaining", user_data['tokens'])
+                    print(f"DEBUG: Refunded {IMAGE_GENERATION_CREDIT_COST} credits due to DALL-E image generation failure. Remaining: {user_data['tokens']}")
             else:
                 st.warning("Could not generate a suitable image prompt.")
             
