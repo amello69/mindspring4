@@ -373,6 +373,37 @@ def profile_page():
     st.write(f"**Email:** {user_data.get('email', 'N/A')}")
     st.write(f"**Tokens Remaining:** {user_data.get('tokens', 'N/A')}")
 
+    # --- Avatar Upload Section ---
+    st.header("Profile Avatar")
+    current_avatar_b64 = user_data.get('avatar_b64')
+    if current_avatar_b64:
+        st.image(base64.b64decode(current_avatar_b64), caption="Your Current Avatar", width=150)
+    else:
+        st.info("No avatar uploaded yet.")
+
+    with st.form("avatar_upload_form"):
+        uploaded_file = st.file_uploader("Upload a new avatar (PNG, JPG, JPEG, max 1MB)", type=["png", "jpg", "jpeg"])
+        upload_avatar_button = st.form_submit_button("Upload Avatar")
+
+        if upload_avatar_button and uploaded_file is not None:
+            if uploaded_file.size > 1 * 1024 * 1024: # 1 MB limit
+                st.error("File size exceeds 1MB. Please upload a smaller image.")
+            else:
+                # Read image as bytes and encode to Base64
+                image_bytes = uploaded_file.read()
+                image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+                
+                user_data['avatar_b64'] = image_b64
+                if update_user_data(user_data):
+                    st.success("Avatar uploaded successfully!")
+                    st.rerun() # Rerun to display the new avatar
+                else:
+                    st.error("Failed to upload avatar.")
+        elif upload_avatar_button and uploaded_file is None:
+            st.warning("Please select a file to upload.")
+    # --- End Avatar Upload Section ---
+
+
     st.header("Password Reset")
     st.info("To reset your password, please contact support or use the 'Forgot Password' link on the login page (if implemented externally).")
 
@@ -788,6 +819,10 @@ def tutor_page():
 def main():
     """Controls the flow of the Streamlit application."""
     st.sidebar.title("Navigation")
+    
+    # Add the logo at the top of the sidebar
+    st.sidebar.image("logo.png", use_column_width=True, caption="AI Tutor 25 Logo")
+
     if st.session_state.logged_in:
         if st.sidebar.button("Profile"):
             st.session_state.current_page = 'profile'
