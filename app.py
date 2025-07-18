@@ -821,7 +821,7 @@ def main():
     st.sidebar.title("Navigation")
     
     # Add the logo at the top of the sidebar
-    st.sidebar.image("logo.png", use_column_width=True, caption="AI Tutor 25 Logo")
+    st.sidebar.image("logo.png", use_column_width=True)
 
     if st.session_state.logged_in:
         if st.sidebar.button("Profile"):
