@@ -818,7 +818,7 @@ def tutor_page():
 # --- Main App Logic ---
 def main():
     """Controls the flow of the Streamlit application."""
-    st.sidebar.title("Navigation")
+    #st.sidebar.title("Navigation")
     
     # Add the logo at the top of the sidebar
     st.sidebar.image("logo.png", use_column_width=True)
