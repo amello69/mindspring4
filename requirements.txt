@@ -1,0 +1,7 @@
+streamlit
+firebase-admin
+bcrypt
+openai
+pypdf
+gTTS
+requests
