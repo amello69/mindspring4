@@ -566,11 +566,12 @@ def tutor_page():
                 You are an AI tutor specializing in {st.session_state.current_study_subject}.
                 Your responses should be tailored to the student's preferences and selected subject.
                 Student's Grade Level: {student_grade}
-                """
-                if preferences_str:
-                    initial_system_prompt += f"\nStudent's Learning Preferences: {preferences_str}"
-
-                initial_system_prompt += f"""
+                
+                **IMPORTANT INSTRUCTION FOR EQUATIONS:**
+                Whenever you present a chemical equation, mathematical formula, or any scientific notation, please format it using LaTeX.
+                Use `$$...$$` for block equations (on their own line) and `$...$` for inline equations within text.
+                For chemical symbols within LaTeX, use `\text{{Symbol}}` to ensure they are rendered as plain text (e.g., `$\text{{H}}_2\text{{O}}$` for H2O).
+                Example: The balanced equation for water formation is $$\text{{2H}}_2 + \text{{O}}_2 \rightarrow \text{{2H}}_2\text{{O}}$$
                 ---
                 Syllabus for {st.session_state.current_study_subject}:
                 {st.session_state.active_syllabus}
@@ -626,6 +627,7 @@ def tutor_page():
                 if chat_message["role"] == "user":
                     chat_display_area.markdown(f"**You:** {chat_message['content']}")
                 elif chat_message["role"] == "assistant": # Only display assistant messages
+                    # Streamlit's markdown parser will automatically render LaTeX within $$...$$ or $...$
                     chat_display_area.markdown(f"**Tutor:** {chat_message['content']}")
                 elif chat_message["role"] == "image": # Display generated images
                     chat_display_area.image(chat_message['content'], caption="AI Generated Visual")
@@ -656,7 +658,7 @@ def tutor_page():
                     response = client.chat.completions.create(
                         model="gpt-4.1-nano", 
                         messages=messages,
-                        max_tokens=200,
+                        max_tokens=200, # Keeping at 200 as per your previous instruction
                         temperature=0.7,
                     )
                     tutor_response = response.choices[0].message.content
